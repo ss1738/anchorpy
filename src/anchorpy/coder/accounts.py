@@ -1,10 +1,12 @@
 """This module provides `AccountsCoder` and `_account_discriminator`."""
+
 from hashlib import sha256
 from typing import Any, Tuple
 
 from anchorpy_idl import Idl
-from construct import Adapter, Bytes, Container, Sequence, Switch
+from construct import Adapter, Container
 
+from anchorpy.coder.common import _discriminator_layout
 from anchorpy.coder.idl import _typedef_layout
 from anchorpy.program.common import NamedInstruction as AccountToSerialize
 
@@ -22,25 +24,21 @@ class AccountsCoder(Adapter):
         """
         self._accounts_layout = {
             acc.name: _typedef_layout(
-                next(t for t in idl.types if t.name == acc.name),
-                idl.types, acc.name
+                next(t for t in idl.types if t.name == acc.name), idl.types, acc.name
             )
             for acc in idl.accounts
         }
         self.acc_name_to_discriminator = {
-            acc.name: _account_discriminator(acc.name) for acc in idl.accounts
+            acc.name: bytes(acc.discriminator) for acc in idl.accounts
         }
         self.discriminator_to_acc_name = {
             disc: acc_name for acc_name, disc in self.acc_name_to_discriminator.items()
         }
-        discriminator_to_typedef_layout = {
-            disc: self._accounts_layout[acc_name]
+        layouts = [
+            (disc, self._accounts_layout[acc_name])
             for acc_name, disc in self.acc_name_to_discriminator.items()
-        }
-        subcon = Sequence(
-            "discriminator" / Bytes(ACCOUNT_DISCRIMINATOR_SIZE),
-            Switch(lambda this: this.discriminator, discriminator_to_typedef_layout),
-        )
+        ]
+        subcon = _discriminator_layout(layouts)
         super().__init__(subcon)  # type: ignore
 
     def decode(self, obj: bytes) -> Container[Any]:

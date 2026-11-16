@@ -39,7 +39,6 @@ from anchorpy.clientgen.genpy_extension import (
     TypedDict,
     TypedParam,
 )
-from anchorpy.coder.common import _sighash
 
 CONST_ACCOUNTS = {
     "associated_token_program": "ASSOCIATED_TOKEN_PROGRAM_ID",
@@ -299,9 +298,7 @@ def gen_instructions_code(idl: Idl, out: Path, gen_pdas: bool) -> dict[Path, str
         remaining_accounts_concatenation = If(
             "remaining_accounts is not None", Line("keys += remaining_accounts")
         )
-        identifier_assignment = Assign(
-            "identifier", _sighash(ix_name_snake_unsanitized)
-        )
+        identifier_assignment = Assign("identifier", bytes(ix.discriminator))
         encoded_args_assignment = Assign("encoded_args", encoded_args_val)
         data_assignment = Assign("data", "identifier + encoded_args")
         returning = Return("Instruction(program_id, data, keys)")

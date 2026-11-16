@@ -47,7 +47,6 @@ from anchorpy.clientgen.genpy_extension import (
     TypedDict,
     TypedParam,
 )
-from anchorpy.coder.accounts import _account_discriminator
 
 
 def gen_accounts(idl: Idl, root: Path) -> None:
@@ -104,7 +103,6 @@ def gen_account_code(acc: IdlTypeDef, idl: Idl) -> str:
         FromImport("solana.rpc.async_api", ["AsyncClient"]),
         FromImport("solana.rpc.commitment", ["Commitment"]),
         ImportAs("borsh_construct", "borsh"),
-        FromImport("anchorpy.coder.accounts", ["ACCOUNT_DISCRIMINATOR_SIZE"]),
         FromImport("anchorpy.error", ["AccountInvalidDiscriminator"]),
         FromImport("anchorpy.utils.rpc", ["get_multiple_accounts"]),
         FromImport(
@@ -176,7 +174,12 @@ def gen_account_code(acc: IdlTypeDef, idl: Idl) -> str:
         )
     json_interface = TypedDict(json_interface_name, json_interface_params)
     discriminator_assignment = Assign(
-        "discriminator: typing.ClassVar", _account_discriminator(name)
+        "discriminator: typing.ClassVar",
+        bytes(
+            next(
+                account for account in idl.accounts if account.name == acc.name
+            ).discriminator
+        ),
     )
     layout_assignment = Assign(
         "layout: typing.ClassVar", f"borsh.CStruct({','.join(layout_items)})"
@@ -263,12 +266,10 @@ def gen_account_code(acc: IdlTypeDef, idl: Idl) -> str:
         Suite(
             [
                 If(
-                    "data[:ACCOUNT_DISCRIMINATOR_SIZE] != cls.discriminator",
+                    "data[:len(cls.discriminator)] != cls.discriminator",
                     account_invalid_raise,
                 ),
-                Assign(
-                    "dec", f"{name}.layout.parse(data[ACCOUNT_DISCRIMINATOR_SIZE:])"
-                ),
+                Assign("dec", f"{name}.layout.parse(data[len(cls.discriminator):])"),
                 Return(decode_body_end),
             ]
         ),

@@ -22,7 +22,7 @@ def test_can_encode_and_decode_user_defined_types():
                 "name": "initialize",
                 "accounts": [],
                 "args": [],
-                "discriminator": [],
+                "discriminator": [175, 175, 109, 31, 13, 152, 155, 237],
             },
         ],
         "types": [
@@ -76,7 +76,7 @@ def test_can_encode_and_decode_large_integers():
                 "name": "initialize",
                 "accounts": [],
                 "args": [],
-                "discriminator": [],
+                "discriminator": [175, 175, 109, 31, 13, 152, 155, 237],
             },
         ],
         "types": [

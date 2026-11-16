@@ -45,7 +45,7 @@ def idl() -> Idl:
                 "name": "initialize",
                 "accounts": [],
                 "args": [],
-                "discriminator": []
+                "discriminator": [175, 175, 109, 31, 13, 152, 155, 237]
             }
         ]
     }"""

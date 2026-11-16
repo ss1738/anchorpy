@@ -1,4 +1,5 @@
 """Common utilities for encoding and decoding."""
+
 from hashlib import sha256
 from typing import Dict, Union
 
@@ -17,6 +18,32 @@ from anchorpy_idl import (
     IdlTypeSimple,
     IdlTypeVec,
 )
+from construct import Const, Construct, Select, Sequence, Switch
+from construct import Optional as OptionalLayout
+
+
+def _discriminator_layout(
+    layouts: list[tuple[bytes, Construct]], allow_unknown: bool = False
+) -> Construct:
+    """Dispatch using the explicit, nonempty discriminator bytes in an IDL.
+
+    Prefix collisions cannot be decoded unambiguously and must not depend on
+    declaration order. Check before constructing the dispatch table.
+    """
+    discriminators = [disc for disc, _ in layouts]
+    for index, disc in enumerate(discriminators):
+        if not disc:
+            raise ValueError("IDL discriminators must not be empty")
+        for other in discriminators[:index]:
+            if disc.startswith(other) or other.startswith(disc):
+                raise ValueError("IDL discriminators must be unique and prefix-free")
+    selector = Select(*(Const(disc) for disc in discriminators))
+    if allow_unknown:
+        selector = OptionalLayout(selector)
+    return Sequence(
+        "discriminator" / selector,
+        Switch(lambda this: this.discriminator, dict(layouts)),
+    )
 
 
 def _sighash(ix_name: str) -> bytes:

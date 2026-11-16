@@ -1,4 +1,5 @@
 """Provides the `AccountClient` class."""
+
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Union
 
@@ -12,10 +13,6 @@ from solders.keypair import Keypair
 from solders.pubkey import Pubkey
 from solders.system_program import CreateAccountParams, create_account
 
-from anchorpy.coder.accounts import (
-    ACCOUNT_DISCRIMINATOR_SIZE,
-    _account_discriminator,
-)
 from anchorpy.coder.coder import Coder
 from anchorpy.coder.common import _account_size
 from anchorpy.error import AccountDoesNotExistError, AccountInvalidDiscriminator
@@ -80,7 +77,8 @@ class AccountClient(object):
         self._program_id = program_id
         self._provider = provider
         self._coder = coder
-        self._size = ACCOUNT_DISCRIMINATOR_SIZE + _account_size(idl, idl_account)
+        self._discriminator = coder.accounts.acc_name_to_discriminator[idl_account.name]
+        self._size = len(self._discriminator) + _account_size(idl, idl_account)
 
     async def fetch(
         self, address: Pubkey, commitment: Optional[Commitment] = None
@@ -104,8 +102,8 @@ class AccountClient(object):
         if not account_info.value:
             raise AccountDoesNotExistError(f"Account {address} does not exist")
         data = account_info.value.data
-        discriminator = _account_discriminator(self._idl_account.name)
-        if discriminator != data[:ACCOUNT_DISCRIMINATOR_SIZE]:
+        discriminator = self._discriminator
+        if discriminator != data[: len(discriminator)]:
             msg = f"Account {address} has an invalid discriminator"
             raise AccountInvalidDiscriminator(msg)
         return self._coder.accounts.decode(data)
@@ -132,12 +130,12 @@ class AccountClient(object):
             batch_size=batch_size,
             commitment=commitment,
         )
-        discriminator = _account_discriminator(self._idl_account.name)
+        discriminator = self._discriminator
         result: list[Optional[Container[Any]]] = []
         for account in accounts:
             if account is None:
                 result.append(None)
-            elif discriminator == account.account.data[:8]:
+            elif discriminator == account.account.data[: len(discriminator)]:
                 result.append(self._coder.accounts.decode(account.account.data))
             else:
                 result.append(None)
@@ -187,7 +185,7 @@ class AccountClient(object):
                 Note: an int entry is converted to a `dataSize` filter.
         """
         all_accounts = []
-        discriminator = _account_discriminator(self._idl_account.name)
+        discriminator = self._discriminator
         to_encode = discriminator if buffer is None else discriminator + buffer
         bytes_arg = b58encode(to_encode).decode("ascii")
         base_memcmp_opt = MemcmpOpts(

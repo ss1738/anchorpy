@@ -1,4 +1,5 @@
 """This module deals with (de)serializing Anchor events."""
+
 from hashlib import sha256
 from typing import Any, Dict, Optional, Tuple
 
@@ -6,8 +7,9 @@ from anchorpy_idl import (
     Idl,
     IdlEvent,
 )
-from construct import Adapter, Bytes, Construct, Sequence, Switch
+from construct import Adapter, Construct
 
+from anchorpy.coder.common import _discriminator_layout
 from anchorpy.coder.idl import _typedef_layout
 from anchorpy.program.common import Event
 
@@ -49,19 +51,26 @@ class EventCoder(Adapter):
         self.discriminators: Dict[bytes, str] = (
             {}
             if idl_events is None
-            else {_event_discriminator(event.name): event.name for event in idl_events}
+            else {bytes(event.discriminator): event.name for event in idl_events}
         )
         self.discriminator_to_layout = {
             disc: self.layouts[event_name]
             for disc, event_name in self.discriminators.items()
         }
-        subcon = Sequence(
-            "discriminator" / Bytes(8),  # not base64-encoded here
-            Switch(lambda this: this.discriminator, self.discriminator_to_layout),
+        subcon = _discriminator_layout(
+            [
+                (bytes(event.discriminator), self.layouts[event.name])
+                for event in idl_events or []
+            ],
+            allow_unknown=True,
         )
         super().__init__(subcon)  # type: ignore
 
-    def _decode(self, obj: Tuple[bytes, Any], context, path) -> Optional[Event]:
+    def _decode(
+        self, obj: Optional[Tuple[bytes, Any]], context, path
+    ) -> Optional[Event]:
+        if obj is None:
+            return None
         disc = obj[0]
         try:
             event_name = self.discriminators[disc]

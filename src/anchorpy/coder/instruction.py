@@ -1,29 +1,16 @@
 """This module deals (de)serializing program instructions."""
+
 from typing import Any, Dict, Protocol, Tuple, TypeVar, cast
 
 from anchorpy_idl import Idl
 from borsh_construct import CStruct
-from construct import Adapter, Bytes, Construct, Container, Sequence, Switch
+from construct import Adapter, Construct, Container
 from pyheck import snake
 
-from anchorpy.coder.common import _sighash
+from anchorpy.coder.common import _discriminator_layout
 from anchorpy.coder.idl import _field_layout
 from anchorpy.idl import TypeDefs
 from anchorpy.program.common import NamedInstruction
-
-
-class _Sighash(Adapter):
-    """Sighash as a Construct Adapter."""
-
-    def __init__(self) -> None:
-        """Initialize."""
-        super().__init__(Bytes(8))  # type: ignore
-
-    def _encode(self, obj: str, context, path) -> bytes:
-        return _sighash(obj)
-
-    def _decode(self, obj: bytes, context, path):
-        raise ValueError("Sighash cannot be reversed")
 
 
 class InstructionCoder(Adapter):
@@ -36,23 +23,21 @@ class InstructionCoder(Adapter):
             idl: The parsed IDL object.
         """
         self.ix_layout = _parse_ix_layout(idl)
-        sighasher = _Sighash()
         sighash_layouts: Dict[bytes, Construct] = {}
         sighashes: Dict[str, bytes] = {}
         sighash_to_name: Dict[bytes, str] = {}
+        layouts = []
         for ix in idl.instructions:
             ix_name = snake(ix.name)
-            sh = sighasher.build(ix_name)
+            sh = bytes(ix.discriminator)
             sighashes[ix_name] = sh
             sighash_layouts[sh] = self.ix_layout[ix_name]
             sighash_to_name[sh] = ix_name
+            layouts.append((sh, self.ix_layout[ix_name]))
         self.sighash_layouts = sighash_layouts
         self.sighashes = sighashes
         self.sighash_to_name = sighash_to_name
-        subcon = Sequence(
-            "sighash" / Bytes(8),
-            Switch(lambda this: this.sighash, sighash_layouts),
-        )
+        subcon = _discriminator_layout(layouts)
         super().__init__(subcon)  # type: ignore
 
     def encode(self, ix_name: str, ix: Dict[str, Any]) -> bytes:
@@ -82,8 +67,7 @@ _SA = TypeVar("_SA", bound="_SupportsAdd")
 class _SupportsAdd(Protocol):
     """Any type T where +(:T, :T) -> T."""
 
-    def __add__(self: _SA, other: _SA) -> _SA:
-        ...
+    def __add__(self: _SA, other: _SA) -> _SA: ...
 
 
 def _parse_ix_layout(idl: Idl) -> Dict[str, Construct]:
